@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Experiment: {{ EXPERIMENT_NAME | default("untitled") }}
+# Generated: {{ GENERATED_AT | default("by experiment-skill") }}
+#
+# This script runs on SCO ACP (SenseCore GPU cluster).
+# It is self-contained: installs dependencies, runs experiments, saves results.
+# =============================================================================
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
+export PYTHONUNBUFFERED=1
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
+{% for key, value in EXTRA_ENV.items() %}
+export {{ key }}="{{ value }}"
+{% endfor %}
+
+echo "============================================"
+echo " Experiment: {{ EXPERIMENT_NAME | default("untitled") }}"
+echo " Start: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+echo " Host: $(hostname)"
+echo " GPUs: ${CUDA_VISIBLE_DEVICES}"
+echo "============================================"
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+{% if REQUIREMENTS_FILE %}
+if [[ -f "{{ REQUIREMENTS_FILE }}" ]]; then
+    echo "[setup] Installing dependencies from {{ REQUIREMENTS_FILE }}..."
+    pip install -r {{ REQUIREMENTS_FILE }} --quiet
+fi
+{% else %}
+echo "[setup] No requirements.txt found, skipping dependency install."
+{% endif %}
+
+{% if EXTRA_PIP_PACKAGES %}
+echo "[setup] Installing extra packages..."
+pip install {{ EXTRA_PIP_PACKAGES | join(" ") }} --quiet
+{% endif %}
+
+# ---------------------------------------------------------------------------
+# Output directory
+# ---------------------------------------------------------------------------
+RESULTS_DIR="${RESULTS_DIR:-./results}"
+mkdir -p "${RESULTS_DIR}"
+
+# ---------------------------------------------------------------------------
+# Main experiment
+# ---------------------------------------------------------------------------
+{% if ENTRY_SCRIPT %}
+echo "[run] Starting: {{ ENTRY_SCRIPT }}"
+{% if ENTRY_ARGS %}
+python {{ ENTRY_SCRIPT }} {{ ENTRY_ARGS | join(" ") }} 2>&1 | tee "${RESULTS_DIR}/run.log"
+{% else %}
+python {{ ENTRY_SCRIPT }} 2>&1 | tee "${RESULTS_DIR}/run.log"
+{% endif %}
+EXIT_CODE=${PIPESTATUS[0]}
+{% else %}
+echo "[run] Starting: train.py"
+python train.py 2>&1 | tee "${RESULTS_DIR}/run.log"
+EXIT_CODE=${PIPESTATUS[0]}
+{% endif %}
+
+# ---------------------------------------------------------------------------
+# Report
+# ---------------------------------------------------------------------------
+echo "============================================"
+echo " End: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+echo " Exit code: ${EXIT_CODE}"
+echo " Results: ${RESULTS_DIR}/"
+echo "============================================"
+
+exit ${EXIT_CODE}

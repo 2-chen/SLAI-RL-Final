@@ -1,0 +1,43 @@
+# Verdict History — {{ TOPIC }}
+
+**Pipeline started**: {{ STARTED_AT }}
+**Last updated**: {{ UPDATED_AT }}
+**Target**: {{ TARGET_VERDICT }} ({{ VENUE }})
+
+## Summary
+
+| Iteration | Date | External Verdict | Internal Avg | Top Issue | Round Dir |
+|-----------|------|-----------------|--------------|-----------|-----------|
+{% for v in VERDICTS %}
+| {{ v.iteration }} | {{ v.date }} | **{{ v.external }}** | {{ v.internal_avg }}/10 | {{ v.top_issue }} | {{ v.round_dir }} |
+{% endfor %}
+
+{% if STOPPED %}
+## Pipeline Stopped
+
+**Reason**: {{ STOP_REASON }}
+**Final verdict**: {{ FINAL_VERDICT }}
+**Total iterations**: {{ TOTAL_ITERATIONS }}
+{% endif %}
+
+{% if ACTIVE %}
+## Current Status
+
+**Iteration**: {{ CURRENT_ITERATION }} / {{ MAX_ITERATIONS }}
+**Stage**: {{ CURRENT_STAGE }}
+{% endif %}
+
+## Trend
+
+```
+{% for v in VERDICTS %}
+  Round {{ v.iteration }}: {{ v.external }} (internal: {{ v.internal_avg }}/10)
+  {{ v.trend_arrow }}
+{% endfor %}
+```
+
+{% if TREND_ANALYSIS %}
+## Analysis
+
+{{ TREND_ANALYSIS }}
+{% endif %}

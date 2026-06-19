@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# =============================================================================
+# LaTeX Compilation Script
+# Venue: {{ VENUE | default("AAAI") }}
+# Paper: {{ PAPER_NAME | default("paper") }}
+# =============================================================================
+set -euo pipefail
+
+PAPER="${1:-paper}"
+TEXFILE="${PAPER}.tex"
+
+echo "=== Compiling ${TEXFILE} ==="
+echo ""
+
+# Copy venue style files
+{% if VENUE_STY %}
+cp "{{ VENUE_STY }}" . 2>/dev/null || true
+{% endif %}
+{% if VENUE_BST %}
+cp "{{ VENUE_BST }}" . 2>/dev/null || true
+{% endif %}
+
+# Pass 1: pdflatex (generates .aux for bibtex)
+echo "[1/4] pdflatex (first pass)"
+pdflatex -interaction=nonstopmode "${TEXFILE}" > /dev/null 2>&1 || {
+    echo "ERROR: pdflatex failed on first pass. Check ${PAPER}.log"
+    grep -A2 "!" "${PAPER}.log" | head -20
+    exit 1
+}
+
+# Pass 2: bibtex
+if grep -q "citation" "${PAPER}.aux" 2>/dev/null; then
+    echo "[2/4] bibtex"
+    bibtex "${PAPER}" > /dev/null 2>&1 || echo "(bibtex warnings — continuing)"
+else
+    echo "[2/4] bibtex (skipped — no citations)"
+fi
+
+# Pass 3: pdflatex (resolves references)
+echo "[3/4] pdflatex (second pass)"
+pdflatex -interaction=nonstopmode "${TEXFILE}" > /dev/null 2>&1
+
+# Pass 4: pdflatex (final — resolves all cross-references)
+echo "[4/4] pdflatex (final pass)"
+pdflatex -interaction=nonstopmode "${TEXFILE}" > /dev/null 2>&1
+
+echo ""
+
+# Page count
+PAGES=$(pdfinfo "${PAPER}.pdf" 2>/dev/null | grep Pages | awk '{print $2}' || echo "?")
+echo "Pages: ${PAGES}"
+
+# Citation check
+UNDEFINED=$(grep -c "Citation.*undefined" "${PAPER}.log" 2>/dev/null || echo "0")
+if [[ "${UNDEFINED}" -gt 0 ]]; then
+    echo "WARNING: ${UNDEFINED} undefined citation(s)"
+    grep "Citation.*undefined" "${PAPER}.log"
+fi
+
+# Overfull check
+OVERFULL=$(grep -c "Overfull" "${PAPER}.log" 2>/dev/null || echo "0")
+if [[ "${OVERFULL}" -gt 0 ]]; then
+    echo "WARNING: ${OVERFULL} overfull hbox(es)"
+fi
+
+# Reference check
+RERUN=$(grep -c "Rerun to get" "${PAPER}.log" 2>/dev/null || echo "0")
+if [[ "${RERUN}" -gt 0 ]]; then
+    echo "NOTE: labels may have changed — consider one more pdflatex pass"
+fi
+
+echo ""
+echo "=== Done ==="
+echo "Output: ${PAPER}.pdf"

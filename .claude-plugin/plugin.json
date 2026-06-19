@@ -1,0 +1,26 @@
+{
+  "name": "chen-research-skills",
+  "description": "Automated AI research skill suite: literature search, GPU experiments, CCF-A paper writing, dual-source peer review, and closed-loop pipeline orchestration with context compression",
+  "version": "1.0.0",
+  "author": {
+    "name": "Chen Research",
+    "email": "250010008@slai.edu.cn"
+  },
+  "homepage": "https://github.com/user/chen-research-skills",
+  "repository": "https://github.com/user/chen-research-skills",
+  "license": "MIT",
+  "keywords": [
+    "research",
+    "academic",
+    "paper",
+    "literature-review",
+    "peer-review",
+    "latex",
+    "gpu",
+    "sensecore",
+    "sco",
+    "ccf-a",
+    "pipeline",
+    "automation"
+  ]
+}

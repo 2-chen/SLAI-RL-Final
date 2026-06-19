@@ -1,0 +1,25 @@
+{
+  "name": "chen-research-skills",
+  "description": "Automated AI research skill suite — 6 skills covering the full research lifecycle",
+  "owner": {
+    "name": "Chen Research",
+    "email": "250010008@slai.edu.cn"
+  },
+  "plugins": [
+    {
+      "name": "chen-research-skills",
+      "description": "6 skills: literature search, GPU experiments, CCF-A paper writing, dual-source peer review, closed-loop pipeline, and self-evolving meta-skill",
+      "author": {
+        "name": "Chen Research",
+        "email": "250010008@slai.edu.cn"
+      },
+      "category": "research",
+      "source": {
+        "source": "git-subdir",
+        "url": "file:///data/ResearchSkills/chen-research-skills",
+        "path": "."
+      },
+      "homepage": "https://github.com/user/chen-research-skills"
+    }
+  ]
+}

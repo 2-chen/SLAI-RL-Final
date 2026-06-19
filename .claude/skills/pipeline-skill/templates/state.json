@@ -1,0 +1,22 @@
+{
+  "topic": "",
+  "topic_slug": "",
+  "workspace": "",
+  "current_stage": "init",
+  "iteration": 0,
+  "max_iterations": 10,
+  "target_verdict": "weak accept",
+  "venue": "AAAI",
+  "created_at": "",
+  "updated_at": "",
+  "stages": {
+    "research": {"status": "pending", "completed_at": null, "notes": ""},
+    "experiment": {"status": "pending", "completed_at": null, "notes": "", "skipped": false},
+    "write": {"status": "pending", "completed_at": null, "notes": ""},
+    "review": {"status": "pending", "completed_at": null, "notes": ""}
+  },
+  "verdict_history": [],
+  "experiment_runs": [],
+  "context_compressions": [],
+  "errors": []
+}

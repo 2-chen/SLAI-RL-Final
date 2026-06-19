@@ -1,0 +1,199 @@
+\documentclass[11pt,a4paper]{ctexart}
+
+\setCJKmainfont{AR PL SungtiL GB}
+\setCJKsansfont{AR PL KaitiM GB}
+\setCJKmonofont{AR PL KaitiM GB}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{natbib}
+
+\title{\textbf{观测维度对 DQN 样本效率的影响及自监督预训练的缓解作用}}
+
+\author{
+  作者姓名$^{1}$ \\
+  $^{1}$中国国家人工智能学院 \\
+  \texttt{email@example.com}
+}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+在强化学习中，高维观测空间通常导致样本效率低下。虽然端到端的深度 RL 可以直接处理高维输入，但当观测源自不可逆的传感器映射时，学习性能会显著下降。本文在可控的 8×8 GridWorld 环境中系统研究了观测维度 $M \in \{128, 256, 512, 1024\}$ 对 Double DQN 样本效率的影响，并评估了自监督预训练（autoencoder）作为缓解策略的效果。基于 20 个随机种子、每组 5,000 episode 的 180 组独立实验表明：（1）SSL$\to$DQN 在所有 $M$ 下均保持 100\% 最终成功率和最优路径长度（14 步），样本效率与 $M$ 近乎无关（312--362 ep）；（2）DQN-only 随 $M$ 增大显著退化，$M=1024$ 时仅 30\% 成功率，10/20 种子未能达到 90\% 阈值，且跨种子方差极大（$\sigma=262$）；（3）SSL$\to$DQN 在所有 $M$ 值下均优于 DQN-only，优势随 $M$ 增大而扩大。这些结果为高维观测下的 RL 训练策略选择提供了稳健的实证依据。
+\end{abstract}
+
+\section{引言}
+
+深度强化学习（Deep RL）在许多领域取得了显著成功，但样本效率仍然是一个关键挑战。在实际应用中，agent 通常不能直接观测到环境的真实状态，而是通过传感器获得高维、带噪声的观测。当传感器映射不可逆时，agent 必须从高维观测中提取与任务相关的低维表示。
+
+自监督学习（SSL）通过在无标签数据上预训练编码器，已在计算机视觉和自然语言处理中展现了强大的表示学习能力。在 RL 中，SSL 预训练有望帮助 agent 从高维观测中提取紧凑的潜在表示，从而加速下游策略学习。然而，SSL 预训练在多大程度上能改善不同观测维度下的样本效率，目前缺乏系统的量化研究。
+
+本文在可控的 8×8 GridWorld 环境中设计了一个系统的实验框架：通过冻结的随机 MLP 将 64 维 one-hot 真实状态投影到 $M$ 维观测空间，agent 在训练中完全不可见真实状态。我们比较了三条管线：（1）Identity baseline（直接使用 64 维 one-hot 状态）；（2）DQN-only（在 $M$ 维随机投影上直接训练 DQN）；（3）SSL$\to$DQN（先训练 autoencoder 将 $M$ 维观测压缩到 64 维，再在此潜在空间中训练 DQN）。通过在 $M \in \{128, 256, 512, 1024\}$ 四个维度上运行 180 组独立实验（4 $M$ × 3 管线 × 20 种子，每组 5,000 episode），我们量化了观测维度对样本效率的影响以及 SSL 预训练的缓解效果。
+
+\section{方法}
+
+\subsection{环境：8×8 GridWorld}
+
+我们使用一个 8×8 的网格世界环境，状态空间为 64 个离散位置，用 one-hot 向量 $\mathbf{s} \in \{0,1\}^{64}$ 表示。起点位于 $(0,0)$，目标位于 $(7,7)$。动作空间包含 4 个动作：上、下、左、右。撞墙不移动。到达目标获得 +1 奖励，其他步骤奖励为 0。Episode 在到达目标或达到 64 步上限时终止。BFS 算法计算的最短路径长度为 14 步。
+
+\subsection{随机投影编码器}
+
+真实状态 $\mathbf{s}$ 通过冻结的随机线性投影生成观测：
+\begin{equation}
+\mathbf{o} = \mathbf{W} \mathbf{s} \in \mathbb{R}^M
+\end{equation}
+其中 $\mathbf{W} \in \mathbb{R}^{M \times 64}$ 是随机初始化的权重矩阵，训练期间保持冻结。这模拟了不可逆传感器映射——agent 只能通过 $M$ 维观测 $\mathbf{o}$ 感知环境，无法直接访问真实状态 $\mathbf{s}$。
+
+\subsection{三条训练管线}
+
+\textbf{Identity baseline}：DQN 直接使用 64 维 one-hot 真实状态 $\mathbf{s}$ 作为输入。这代表了不存在传感器映射时的理论上限。
+
+\textbf{DQN-only}：DQN 直接使用 $M$ 维随机投影观测 $\mathbf{o}$ 作为输入。Agent 必须从高维观测中隐式学习有效的状态表示。
+
+\textbf{SSL$\to$DQN}：先使用 autoencoder 进行自监督预训练。Autoencoder 由编码器 $\mathcal{E}_\phi: \mathbb{R}^M \to \mathbb{R}^{64}$ 和解码器 $\mathcal{D}_\psi: \mathbb{R}^{64} \to \mathbb{R}^M$ 组成，通过重建损失 $\mathcal{L} = \|\mathbf{o} - \mathcal{D}_\psi(\mathcal{E}_\phi(\mathbf{o}))\|^2$ 在枚举的所有 64 个状态观测上训练。预训练完成后，冻结编码器 $\mathcal{E}_\phi$，DQN 在编码后的 64 维潜在表示 $\mathbf{z} = \mathcal{E}_\phi(\mathbf{o})$ 上训练。
+
+\subsection{Double DQN 配置}
+
+所有管线使用统一的 DQN 架构：输入维度 $\to 256 \to 256 \to 4$，仅输入维度因管线而异。超参数配置如下：折扣因子 $\gamma = 0.99$，学习率 $10^{-3}$，batch size 64，replay buffer 容量 10,000，$\varepsilon$-greedy 从 1.0 线性衰减到 0.05（前 20\% episode），target network 每 100 步更新，总训练 episode 数 5,000，每 50 episode 进行 1 次贪婪评估（10 episode 平均）。
+
+\subsection{实验矩阵}
+
+实验矩阵包括 4 个观测维度 $M \in \{128, 256, 512, 1024\}$ × 3 条管线 × 20 个随机种子，共 180 组独立实验。每组实验在 NVIDIA H100 80GB GPU 上运行，通过 2 路 GPU 并行 + 8 路并发 subprocess 加速，总计约 25 分钟完成全部实验。所有种子（环境、随机编码器初始化、SSL 训练、DQN 训练）独立且可追溯。
+
+\section{实验结果}
+
+\subsection{样本效率与最终性能}
+
+表~\ref{tab:results} 和图~\ref{fig:efficiency} 展示了各管线和观测维度下的样本效率（达到 90\% 成功率所需 episode 数）与最终性能（20 种子均值 $\pm$ 标准差）。
+
+\begin{table}[htbp]
+\centering
+\caption{各管线和观测维度下的样本效率与最终性能（20 种子，5,000 episode）}
+\label{tab:results}
+\begin{tabular}{cccccc}
+\toprule
+管线 & $M$ & 达到 90\% 所需 Ep & 最终成功率 & 达到 90\% 比例 & 最优路径比例 \\
+\midrule
+\multirow{4}{*}{SSL$\to$DQN}
+& 128 & 362 $\pm$ 139 & 1.00 $\pm$ 0.00 & 20/20 & 20/20 \\
+& 256 & 352 $\pm$ 112 & 1.00 $\pm$ 0.00 & 20/20 & 20/20 \\
+& 512 & \textbf{312 $\pm$ 121} & 1.00 $\pm$ 0.00 & 20/20 & 20/20 \\
+& 1024 & 320 $\pm$ 159 & 1.00 $\pm$ 0.00 & 20/20 & 20/20 \\
+\midrule
+\multirow{4}{*}{DQN-only}
+& 128 & 400 $\pm$ 95 & 0.90 $\pm$ 0.30 & 20/20 & 18/20 \\
+& 256 & 400 $\pm$ 221 & 0.80 $\pm$ 0.40 & 20/20 & 16/20 \\
+& 512 & 426 $\pm$ 144 & 0.70 $\pm$ 0.46 & 17/20 & 14/20 \\
+& 1024 & 400 $\pm$ 262 & 0.30 $\pm$ 0.46 & 10/20 & 6/20 \\
+\midrule
+Identity & 64 & 368 $\pm$ 140 & 0.95 $\pm$ 0.22 & 20/20 & 19/20 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{/data/homework/RL/final2/paper/fig_sample_efficiency.jpg}
+\caption{样本效率随观测维度 $M$ 的变化。SSL$\to$DQN 在所有 $M$ 下均优于 DQN-only，且样本效率与 $M$ 近乎无关。虚线为 Identity baseline 的平均值（368 ep）。注意 DQN-only 在 $M=1024$ 处的高方差（$\sigma=262$）和低达到率（10/20）。}
+\label{fig:efficiency}
+\end{figure}
+
+\textbf{核心发现 1：SSL$\to$DQN 使样本效率与观测维度解耦。} SSL$\to$DQN 在所有 $M$ 条件下均保持 100\% 最终成功率和最优路径长度（14 步），样本效率在 312--362 ep 之间，与 $M$ 无明显相关性。即使在 $M=1024$（观测/状态比为 16:1）时，SSL 预训练仍能稳定提取有效表示，所有 20 个种子均达最优性能。
+
+\textbf{核心发现 2：DQN-only 随 $M$ 增大显著退化，方差急剧上升。} DQN-only 在 $M=128$ 时表现尚可（90\% 成功率，18/20 最优路径），但随着 $M$ 增大持续恶化：$M=256$ 时 80\% 成功率，$M=512$ 时降至 70\% 且 3 个种子未达 90\% 阈值，$M=1024$ 时仅 30\% 成功率、10/20 种子达到 90\% 阈值、6/20 种子学会最优路径。跨种子方差从 $M=128$ 的 $\sigma=95$ 增至 $M=1024$ 的 $\sigma=262$，表明高维观测下 DQN 训练极不稳定。
+
+\textbf{核心发现 3：SSL$\to$DQN 在所有 $M$ 下均优于 DQN-only。} 与先前小规模实验（5 种子、1,000 episode）中低维度下 DQN-only 略优的结论不同，20 种子、5,000 episode 的实验表明 SSL$\to$DQN 甚至在最有利的条件下（$M=128$）也优于 DQN-only（362 vs 400 ep），且优势随 $M$ 增大而急剧扩大。在 $M=1024$ 时，SSL$\to$DQN 以 100\% 成功率对 DQN-only 的 30\% 成功率取得了压倒性优势。
+
+\subsection{学习曲线}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{/data/homework/RL/final2/paper/fig_learning_curves.jpg}
+\caption{不同观测维度 $M$ 下的学习曲线。实线为 20 个种子的均值，阴影为标准差。}
+\label{fig:curves}
+\end{figure}
+
+图~\ref{fig:curves} 的学习曲线进一步揭示了管线间的差异：
+\begin{itemize}
+\item $M=128$：两条管线均收敛至接近 100\% 成功率，SSL$\to$DQN 收敛略快且方差更低。
+\item $M=256$：DQN-only 方差明显增大，个别种子波动剧烈；SSL$\to$DQN 保持稳定收敛。
+\item $M=512$：差距进一步扩大，DQN-only 平均成功率不足 80\%，且方差跨越 0--1 范围。
+\item $M=1024$：差距达到最大——SSL$\to$DQN 稳定收敛至 100\%，而 DQN-only 平均成功率仅 30\%，阴影区域覆盖整个范围，反映出极端的种子间不稳定性。
+\end{itemize}
+
+\subsection{SSL 重建质量}
+
+SSL autoencoder 在所有 $M$ 条件下的重建损失均极低（$10^{-6}$ 量级），表明 autoencoder 成功学习了对 $M$ 维观测的精确重构。重建损失与 $M$ 无显著相关性（$M=128$: $3.1\times 10^{-6}$, $M=1024$: $1.8\times 10^{-5}$），说明瓶颈维度（64）足以捕获随机投影观测的主要变化模式。
+
+值得注意的是，SSL encoder 输出的 64 维潜在表示并非对真实状态 $\mathbf{s}$ 的恢复——它是对 $M$ 维观测 $\mathbf{o}$ 的降维表示，保留了重建所需的信息。尽管潜在表示不等于真实状态，它仍然为 DQN 提供了比原始高维观测更适合策略学习的特征空间。
+
+\subsection{最终性能分析}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\textwidth]{/data/homework/RL/final2/paper/fig_final_performance.jpg}
+\caption{最终成功率随观测维度 $M$ 的变化。SSL$\to$DQN 在所有 $M$ 下保持 100\% 成功率；DQN-only 从 $M=128$ 的 90\% 单调下降至 $M=1024$ 的 30\%。}
+\label{fig:final}
+\end{figure}
+
+图~\ref{fig:final} 展示了各管线在不同 $M$ 下的最终成功率。SSL$\to$DQN 的鲁棒性一目了然——在所有 $M$ 下均达到 100\%，跨种子方差为零。相比之下，DQN-only 呈现清晰的单调下降趋势，且误差条随 $M$ 增长而急剧扩大，表明种子间的不可靠性日益严重。Identity baseline 的最终成功率为 95\%（1/20 种子未收敛），略低于 SSL$\to$DQN，这可能是由于 one-hot 稀疏表示在神经网络中的梯度传播效率低于 SSL encoder 产生的稠密潜在表示。
+
+\section{讨论}
+
+\subsection{SSL 的工作机制}
+
+SSL autoencoder 通过重建损失学习的是从 $M$ 维观测到 64 维潜在空间的映射，该映射保留了 $M$ 维观测中的主要结构信息。有几种可能的解释：
+
+\textbf{流形假设}：随机投影 $\mathbf{W}$ 将 64 维 one-hot 嵌入到 $M$ 维空间的低维线性子流形上。Autoencoder 学习恢复这个流形结构，其 64 维瓶颈层自然地捕获了数据的内在维度。DQN 在这个结构化的低维空间中学习比在原始的 $M$ 维空间中学习更容易。SSL 的训练数据覆盖了全部 64 个状态，确保了流形结构的完整恢复。
+
+\textbf{隐式正则化}：SSL 预训练强制 DQN 在一个信息瓶颈（64 维）上学习，限制了假设空间，起到了隐式正则化的作用。这在观测维度远大于真实状态维度时尤为重要（如 $M=1024$，观测/状态比为 16:1）。
+
+\textbf{训练稳定性}：SSL encoder 将 $M$ 维稀疏随机投影转化为 64 维稠密潜在表示，这可能改善了 DQN 训练中的梯度流动。这一解释与 DQN-only 在高 $M$ 下方差急剧增大的现象一致——高维随机投影的内在噪声使梯度估计变得不稳定。
+
+\subsection{与 Identity baseline 的对比}
+
+一个出乎意料的发现是 SSL$\to$DQN 在性能上超越了 Identity baseline（100\% vs 95\% 成功率，312--362 vs 368 ep 的样本效率）。尽管 Identity 直接使用完整的真实状态信息，但其 one-hot 表示的稀疏性（64 维中 63 维为零）可能导致神经网络中的梯度传播效率较低。SSL encoder 将稀疏的 one-hot 先转换为稠密的随机投影，再压缩为稠密的 64 维潜在表示，这种连续的稠密表示可能比稀疏的离散表示更有利于 DQN 的梯度优化。
+
+\subsection{与先前实验结论的差异}
+
+本实验（20 种子，5,000 episode）与早期小规模实验（5 种子，1,000 episode）存在重要差异：
+
+\begin{enumerate}
+\item \textbf{低维度 DQN-only 优势消失}：早期实验中 $M \leq 256$ 时 DQN-only 略优于 SSL$\to$DQN，但在本实验中 SSL$\to$DQN 在所有 $M$ 下均占优。增加训练 episode 使得 SSL 预训练的初始开销在更长的训练中被摊销。
+\item \textbf{DQN-only 高 $M$ 表现更差}：早期实验中 DQN-only 在 $M=1024$ 时达到 40\% 成功率，但本实验中仅 30\%，且仅半数种子达到 90\% 阈值。更多种子揭示了高维观测下 DQN 训练的根本不稳定性。
+\item \textbf{SSL$\to$DQN 的高度一致性}：20 种子结果确认了 SSL$\to$DQN 在所有 $M$ 下的 100\% 成功率并非偶然，而是 SSL 预训练提供的结构性优势。
+\end{enumerate}
+
+\subsection{局限与未来工作}
+
+\textbf{环境规模}：当前实验局限于 8×8 GridWorld（64 状态）。未来工作应扩展到更大状态空间（如 Atari 游戏或 MiniGrid）以验证发现的泛化性。
+
+\textbf{随机投影类型}：本研究仅使用线性随机投影。非线性投影（如带激活函数的 MLP）、卷积投影或学得的投影可能产生不同的结论。
+
+\textbf{SSL 方法}：仅评估了标准 autoencoder。对比学习（如 SimCLR）、masked autoencoding（如 MAE）或 variational autoencoder 可能在高维场景下提供不同的效果。
+
+\textbf{RL 算法}：仅在 Double DQN 上验证。PPO、SAC 等 actor-critic 算法可能对观测维度有不同的敏感度，因为其策略和价值网络的分离可能改变表示学习的需求。
+
+\section{结论}
+
+本文在可控的 GridWorld 环境中，通过 180 组独立实验系统量化了观测维度对 DQN 样本效率的影响。核心结论是：
+
+\begin{enumerate}
+\item 自监督预训练（autoencoder）使 DQN 的样本效率与观测维度解耦：SSL$\to$DQN 在 $M \in \{128, 256, 512, 1024\}$ 的所有条件下均保持 100\% 成功率和最优路径，样本效率稳定在 312--362 ep。
+\item 端到端 DQN 随观测维度增大持续退化：$M=1024$ 时仅 30\% 成功率，半数种子无法可靠学习，跨种子方差极大（$\sigma=262$），揭示了对高维观测的根本脆弱性。
+\item SSL$\to$DQN 在所有观测维度下均显著优于 DQN-only，优势随 $M$ 增大而急剧扩大，在 $M=1024$ 时达到最大（100\% vs 30\% 成功率）。
+\item 充分的训练 episode（5,000 vs 1,000）揭示了 SSL 预训练在较低维度下也有稳定优势，改变了先前实验中"低维度 DQN-only 更优"的初步结论。
+\end{enumerate}
+
+这些发现为在观测空间维度未知或可变时选择合适的训练策略提供了实用指导：当观测维度远大于状态维度时，SSL 预训练不仅有用，而且可能必不可少；此外，SSL 预训练在任何观测维度下都提供了更可靠的训练结果，是安全默认选择。
+
+\end{document}

@@ -1,0 +1,11 @@
+[
+  {
+    "issue_type": "low_citation_count",
+    "description": "Paper has only 0 unique citations. A top-venue paper typically needs 25+ citations. Add more references, especially in Related Work and Introduction.",
+    "severity": "high",
+    "locations": [
+      "Related Work",
+      "Introduction"
+    ]
+  }
+]

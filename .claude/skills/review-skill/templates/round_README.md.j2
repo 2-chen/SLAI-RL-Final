@@ -1,0 +1,46 @@
+# Review Round {{ ROUND_NUM }}
+
+**Submitted**: {{ SUBMITTED_AT }}
+**Paper**: {{ PAPER_PATH }}
+{% if EXTERNAL_TOKEN %}
+**External Token**: `{{ EXTERNAL_TOKEN }}`
+{% endif %}
+**Status**: {{ STATUS }}
+
+## Quick Summary
+
+{% if EXTERNAL_VERDICT %}
+- External (paperreview.ai): **{{ EXTERNAL_VERDICT }}**
+{% endif %}
+{% if INTERNAL_AVG_SCORE %}
+- Internal Consensus: **{{ INTERNAL_VERDICT }}** (avg {{ INTERNAL_AVG_SCORE }}/10)
+{% endif %}
+{% if AGREEMENT_NOTE %}
+- Agreement: {{ AGREEMENT_NOTE }}
+{% endif %}
+
+## Top Issues
+
+{% for issue in TOP_ISSUES %}
+{{ loop.index }}. [{{ issue.category }}] {{ issue.description }}
+{% endfor %}
+
+## Scores
+
+| Source | Reviewer | Score | Verdict |
+|--------|----------|-------|---------|
+{% if EXTERNAL_VERDICT %}
+| External | paperreview.ai | — | {{ EXTERNAL_VERDICT }} |
+{% endif %}
+{% for reviewer in INTERNAL_REVIEWERS %}
+| Internal | {{ reviewer.name }} | {{ reviewer.score }}/10 | {{ reviewer.verdict }} |
+{% endfor %}
+{% if INTERNAL_AVG_SCORE %}
+| **Internal** | **Consensus** | **{{ INTERNAL_AVG_SCORE }}/10** | **{{ INTERNAL_VERDICT }}** |
+{% endif %}
+
+## Files
+
+- [External Review](external.md)
+- [Internal Reviews](internal/)
+- [Full Synthesis](synthesis.md)
